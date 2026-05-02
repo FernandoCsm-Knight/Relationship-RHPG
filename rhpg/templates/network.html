@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Rede de Relacionamentos{% endblock %}
+
+{% block content %}
+<style>
+  .main { padding: 0 !important; overflow: hidden; }
+</style>
+
+<!-- Floating header overlay -->
+<div style="
+  position: fixed; top: 0; left: 220px; right: 0; z-index: 50;
+  padding: .75rem 1.5rem;
+  background: linear-gradient(to bottom, rgba(245,246,250,.97) 70%, transparent);
+  display: flex; align-items: center; justify-content: space-between; pointer-events: none;
+">
+  <div>
+    <span style="font-size:1rem;font-weight:700;color:var(--text)">Rede de Relacionamentos</span>
+    <span style="font-size:.78rem;color:var(--muted);margin-left:.75rem">Clique e arraste para explorar</span>
+  </div>
+  <div style="display:flex;gap:1rem;font-size:.78rem;pointer-events:auto">
+    <span style="color:var(--high)"><i class="bi bi-circle-fill" style="font-size:.55rem"></i> Alta</span>
+    <span style="color:var(--neutral)"><i class="bi bi-circle-fill" style="font-size:.55rem"></i> Neutro</span>
+    <span style="color:var(--low)"><i class="bi bi-circle-fill" style="font-size:.55rem"></i> Baixa</span>
+    <span style="color:#f4a261"><i class="bi bi-hexagon-fill" style="font-size:.55rem"></i> Bridge</span>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div id="net-overlay" style="
+  position:fixed; top:0; left:220px; right:0; bottom:0; z-index:40;
+  background:#f5f6fa;
+  display:flex; align-items:center; justify-content:center; flex-direction:column; gap:1rem;">
+  <div style="width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite"></div>
+  <div style="color:var(--muted);font-size:.88rem">Carregando grafo…</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+<!-- Full-area iframe -->
+<iframe id="net-frame" src="" style="
+  position: fixed; top: 0; left: 220px; right: 0; bottom: 0;
+  width: calc(100vw - 220px); height: 100vh;
+  border: none; display: block;
+"></iframe>
+
+<!-- Group filter panel -->
+<div id="filter-panel" style="
+  position:fixed; top:54px; right:14px; z-index:50;
+  background:rgba(245,246,250,.96);
+  border:1px solid #dee0f0;
+  border-radius:10px;
+  padding:.6rem .75rem .65rem;
+  backdrop-filter:blur(6px);
+  box-shadow:0 2px 12px rgba(0,0,0,.09);
+  min-width:152px;
+  max-height:calc(100vh - 80px);
+  overflow-y:auto;
+">
+  <div style="font-size:.7rem;font-weight:600;color:#8491a5;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.45rem">
+    Filtrar Grupos
+  </div>
+  <div id="filter-btns"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PALETTE = ["#5b4de8","#d63097","#0a84e8","#7209b7","#008080","#b45309"];
+let selected = new Set();
+
+async function loadGroupFilter() {
+  let groups = [];
+  try { groups = await fetch('/groups/').then(r => r.json()); } catch { return; }
+
+  const container = document.getElementById('filter-btns');
+
+  const allBtn = document.createElement('button');
+  allBtn.id = 'filter-all';
+  allBtn.textContent = 'Todos';
+  allBtn.style.cssText = `
+    display:block; width:100%; padding:.32rem .6rem; margin-bottom:.3rem;
+    background:#1e214033; border:1.5px solid #1e2140bb;
+    border-radius:6px; cursor:pointer; font-size:.74rem;
+    font-weight:700; color:#1a1d2e; text-align:left;
+  `;
+  allBtn.onclick = () => { selected.clear(); applyFilter(groups); };
+  container.appendChild(allBtn);
+
+  groups.forEach((g, i) => {
+    const c = PALETTE[i % PALETTE.length];
+    const btn = document.createElement('button');
+    btn.dataset.gid = g.id;
+    btn.dataset.idx = i;
+    btn.textContent = g.name;
+    btn.style.cssText = `
+      display:block; width:100%; padding:.32rem .6rem; margin-top:.22rem;
+      background:${c}1a; border:1.5px solid ${c}55;
+      border-radius:6px; cursor:pointer; font-size:.74rem;
+      font-weight:400; color:#1a1d2e; text-align:left;
+      opacity:.58; transition:opacity .12s, border-color .12s;
+    `;
+    btn.onclick = () => {
+      if (selected.has(g.id)) selected.delete(g.id);
+      else selected.add(g.id);
+      applyFilter(groups);
+    };
+    container.appendChild(btn);
+  });
+}
+
+function applyFilter(groups) {
+  const allBtn = document.getElementById('filter-all');
+  const isAll = selected.size === 0;
+
+  allBtn.style.fontWeight = isAll ? '700' : '400';
+  allBtn.style.borderColor = isAll ? '#1e2140bb' : '#1e214044';
+  allBtn.style.background  = isAll ? '#1e214033' : '#1e214011';
+
+  document.querySelectorAll('#filter-btns button[data-gid]').forEach(btn => {
+    const active = selected.has(btn.dataset.gid);
+    const c = PALETTE[parseInt(btn.dataset.idx) % PALETTE.length];
+    btn.style.opacity     = active ? '1'   : '0.52';
+    btn.style.fontWeight  = active ? '600' : '400';
+    btn.style.borderColor = active ? c + 'cc' : c + '55';
+    btn.style.background  = active ? c + '2e' : c + '1a';
+  });
+
+  const overlay = document.getElementById('net-overlay');
+  const frame   = document.getElementById('net-frame');
+  const src = selected.size > 0
+    ? `/viz/network?groups=${[...selected].join(',')}`
+    : '/viz/network';
+  const full = location.origin + src;
+  if (frame.src !== full) {
+    overlay.style.display = 'flex';
+    frame.src = src;
+  }
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const frame = document.getElementById('net-frame');
+  frame.onload = () => {
+    document.getElementById('net-overlay').style.display = 'none';
+  };
+  frame.src = '/viz/network';
+  loadGroupFilter();
+});
+</script>
+{% endblock %}
