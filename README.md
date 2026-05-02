@@ -1,301 +1,255 @@
 # Relationship Hypergraph System (RHPG)
 
-Sistema de análise de performance de colaboradores usando teoria de grafos e hipergrafos. Classifica trabalhadores como **alta**, **neutra** ou **baixa** performance correlacionando métricas individuais com a qualidade do trabalho em grupo.
+Sistema de análise de performance organizacional baseado em grafos e hipergrafos. O RHPG combina indicadores individuais, relações de colaboração, participação em grupos/projetos e métricas estruturais de rede para classificar colaboradores em **alta**, **neutra** ou **baixa performance**.
 
----
+O objetivo do projeto é oferecer uma leitura mais contextual da performance: em vez de avaliar uma pessoa apenas por KPIs isolados, o sistema considera também como ela se conecta, colabora e contribui para a qualidade dos grupos em que participa.
 
-## Conceito
+## Demonstração
 
-A ideia central é que a performance de uma pessoa não pode ser medida de forma isolada — ela precisa ser avaliada em relação ao impacto que essa pessoa causa nos grupos em que participa.
+### Dashboard
 
-O sistema usa dois tipos de estrutura:
+![Dashboard do RHPG](img/dashboard.png)
 
-- **Vértices (Workers):** cada colaborador com suas métricas individuais (proficiência, KPIs)
-- **Hipervértices (Groups):** cada grupo/projeto como uma hiperaresta que conecta múltiplos colaboradores
+O dashboard concentra a leitura principal da análise. Ele apresenta a quantidade total de colaboradores, a distribuição entre alta, neutra e baixa performance, gráficos comparativos de score e um leaderboard ordenado pelo composite score. A partir dele também é possível executar a análise e atualizar os resultados.
 
-A classificação final combina 6 métricas:
+### Rede de Relacionamentos
 
-| Métrica | Peso padrão | O que mede |
-|---|---|---|
-| Performance individual | 30% | KPIs / OKRs do colaborador |
-| Proficiência | 15% | Nível de habilidade na área |
-| PageRank | 20% | Influência na rede (quem colabora com quem é valorizado) |
-| Betweenness | 10% | Quem faz ponte entre grupos (broker organizacional) |
-| Afinidade média | 10% | Quão integrado o colaborador está em seus grupos |
-| Delta score médio | 15% | Quanto o grupo melhora/piora com essa pessoa |
+<video src="img/network.mp4" controls width="100%">
+  Seu navegador não conseguiu exibir o vídeo. Abra o arquivo em img/network.mp4.
+</video>
 
----
+A rede mostra como os colaboradores se conectam por relações de colaboração. Os nós são coloridos pela classificação de performance, as arestas indicam a força das relações e os filtros por grupo ajudam a investigar partes específicas da organização.
 
-## Estrutura do Projeto
+### Hipergrafo de Grupos
 
+<video src="img/hipernetwork.mp4" controls width="100%">
+  Seu navegador não conseguiu exibir o vídeo. Abra o arquivo em img/hipernetwork.mp4.
+</video>
+
+O hipergrafo destaca a participação dos colaboradores em grupos e projetos. Essa visão é útil para observar pertencimento, sobreposição entre grupos e colaboradores que atuam como conexão entre diferentes contextos de trabalho.
+
+## O Que o Sistema Oferece
+
+- **Dashboard executivo** com resumo de colaboradores, distribuição por classe de performance, leaderboard e gráficos Plotly.
+- **Rede interativa de relacionamentos** com zoom, arraste, filtros por grupo, tooltips e arestas ponderadas.
+- **Hipergrafo interativo de grupos** representando grupos/projetos como hiperestruturas conectadas aos seus membros.
+- **Classificação de performance** baseada em score composto configurável.
+- **Análise de impacto por grupo**, incluindo delta score para medir quanto cada colaborador melhora ou reduz a qualidade de um grupo.
+- **Métricas de centralidade** com NetworkX, incluindo PageRank e betweenness.
+- **API REST com FastAPI** para cadastro, consulta, análise e visualização.
+- **Persistência em SQLite** via SQLAlchemy.
+- **Testes automatizados** com pytest.
+
+## Como o Score é Calculado
+
+O RHPG calcula um **composite score** para cada colaborador. Esse score combina seis dimensões:
+
+| Métrica | Peso padrão | Interpretação |
+|---|---:|---|
+| Performance individual | 30% | Resultado individual informado para o colaborador. |
+| Proficiência | 15% | Nível de habilidade ou domínio técnico/funcional. |
+| PageRank | 20% | Influência do colaborador dentro da rede de colaboração. |
+| Betweenness | 10% | Capacidade de atuar como ponte entre partes da rede. |
+| Afinidade média | 10% | Grau de integração do colaborador com os grupos dos quais participa. |
+| Delta score médio | 15% | Impacto médio do colaborador na qualidade dos grupos. |
+
+Em termos gerais:
+
+```text
+composite_score =
+    0.30 * individual_performance
+  + 0.15 * proficiency
+  + 0.20 * normalized_pagerank
+  + 0.10 * normalized_betweenness
+  + 0.10 * mean_affinity
+  + 0.15 * normalized_mean_delta
 ```
+
+As métricas de centralidade são normalizadas para a escala `[0, 1]`. O delta médio é deslocado com:
+
+```text
+normalized_mean_delta = clamp((mean_delta + 1) / 2, 0, 1)
+```
+
+### Delta Score
+
+O delta score mede a variação relativa na qualidade de um grupo quando um colaborador participa dele:
+
+```text
+delta(worker, group) =
+    (quality_with_worker - quality_without_worker) / quality_without_worker
+```
+
+A qualidade de um grupo é calculada por:
+
+```text
+group_quality =
+    0.35 * mean(member_individual_performance)
+  + 0.30 * mean(intra_group_collaboration_quality)
+  + 0.20 * project_outcome_score
+  + 0.15 * baseline_work_quality
+```
+
+Um delta positivo indica que o colaborador aumenta a qualidade estimada do grupo. Um delta negativo indica que a qualidade estimada cai quando ele é considerado.
+
+### Afinidade
+
+A afinidade mede o quanto um colaborador está integrado ao grupo:
+
+```text
+affinity(worker, group) =
+    edge_density * mean_collaboration_quality * tenure_bonus
+```
+
+Onde:
+
+```text
+edge_density = conexões do colaborador com outros membros / (tamanho_do_grupo - 1)
+tenure_bonus = min(1.0, tenure_years / 5.0)
+```
+
+### Classificação Final
+
+Por padrão, o sistema usa percentis:
+
+| Classe | Regra padrão |
+|---|---|
+| `HIGH` | Score acima ou igual ao percentil 70. |
+| `NEUTRAL` | Score entre os percentis 30 e 70. |
+| `LOW` | Score abaixo ou igual ao percentil 30. |
+
+Também é possível reclassificar usando thresholds fixos ou K-Means pela rota `/analysis/classify`.
+
+## Arquitetura
+
+```text
 Relationship-RHPG/
 ├── rhpg/
-│   ├── models/           # Modelos de dados (Worker, Group, Relationship)
-│   ├── storage/          # SQLite + SQLAlchemy (CRUD, seed)
-│   ├── graph/            # NetworkX DiGraph + HyperNetX hypergraph
-│   ├── algorithms/       # Delta score, afinidade, centralidade, classificador
-│   ├── api/              # FastAPI (routers, dependências)
-│   └── visualization/    # Pyvis, Plotly, HyperNetX render
-├── tests/                # Pytest (algoritmos + API)
-├── data/                 # rhpg.db (SQLite, gerado automaticamente)
+│   ├── api/              # FastAPI, routers e dependências
+│   ├── algorithms/       # Delta score, afinidade, centralidade e classificação
+│   ├── graph/            # NetworkX DiGraph e HyperNetX Hypergraph
+│   ├── models/           # Dataclasses e schemas Pydantic
+│   ├── storage/          # SQLite, SQLAlchemy, repositórios e seed
+│   ├── templates/        # Interface web renderizada com Jinja2
+│   └── visualization/    # PyVis e Plotly
+├── img/                  # Imagens e vídeos de demonstração
+├── tests/                # Testes automatizados
+├── data/                 # Bancos SQLite gerados localmente
 ├── requirements.txt
 └── pyproject.toml
 ```
 
----
+## Tecnologias
+
+| Tecnologia | Uso |
+|---|---|
+| FastAPI | API REST e aplicação web. |
+| SQLAlchemy | ORM e persistência em SQLite. |
+| Pydantic | Validação dos schemas da API. |
+| NetworkX | Grafo de colaboração e métricas de centralidade. |
+| HyperNetX | Modelagem conceitual do hipergrafo de grupos. |
+| PyVis | Visualizações interativas da rede e do hipergrafo. |
+| Plotly | Gráficos da dashboard. |
+| pandas / numpy | Normalização e manipulação de scores. |
+| scikit-learn | Classificação alternativa por K-Means. |
+| pytest | Testes automatizados. |
 
 ## Instalação
 
-**Pré-requisito:** Python 3.11+
+Pré-requisitos:
+
+- Python 3.11 ou superior.
+- Ambiente virtual recomendado.
 
 ```bash
-# 1. Crie e ative um ambiente virtual
 python -m venv .venv
-.venv\Scripts\activate        # Windows
-source .venv/bin/activate     # Linux/Mac
+```
 
-# 2. Instale as dependências
+Ative o ambiente virtual:
+
+```bash
+# Windows
+.venv\Scripts\activate
+
+# Linux/macOS
+source .venv/bin/activate
+```
+
+Instale as dependências:
+
+```bash
 pip install -r requirements.txt
 ```
 
----
-
-## Como Rodar
+## Como Utilizar
 
 ### 1. Popular o banco com dados de exemplo
-
-Gera 25 colaboradores, 5 grupos e ~70 relações sintéticas:
 
 ```bash
 python -m rhpg.storage.seed
 ```
 
-### 2. Subir a API
+Esse comando cria colaboradores, grupos e relações sintéticas para demonstrar o funcionamento do sistema.
+
+### 2. Iniciar a aplicação
 
 ```bash
 uvicorn rhpg.api.main:app --reload
 ```
 
-A API estará disponível em `http://localhost:8000`.
-Documentação interativa (Swagger): `http://localhost:8000/docs`
+Acesse:
 
-### 3. Rodar os testes
+- Dashboard: `http://localhost:8000/dashboard`
+- Rede interativa: `http://localhost:8000/dashboard/network`
+- Hipergrafo interativo: `http://localhost:8000/dashboard/hypergraph`
+- Documentação Swagger: `http://localhost:8000/docs`
+
+### 3. Executar a análise
+
+Na interface, clique em **Executar Análise** no dashboard.
+
+### 4. Rodar os testes
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest
 ```
-
----
 
 ## Variáveis de Ambiente
 
-| Variável | Padrão | Descrição |
+| Variável | Valor padrão | Descrição |
 |---|---|---|
-| `RHPG_DATABASE_URL` | `sqlite:///./data/rhpg.db` | URL do banco de dados |
+| `RHPG_DATABASE_URL` | `sqlite:///./data/rhpg.db` | URL de conexão com o banco de dados. |
 
----
+## API
 
-## API — Endpoints
+Além da interface web, o projeto expõe uma API REST com FastAPI para cadastro de colaboradores, grupos, relações, execução da análise e acesso aos resultados.
 
-### Workers `/workers`
+Com a aplicação rodando, a documentação interativa da API pode ser acessada em:
 
-| Método | Rota | Descrição |
-|---|---|---|
-| `POST` | `/workers/` | Cadastrar novo colaborador |
-| `GET` | `/workers/` | Listar todos os colaboradores |
-| `GET` | `/workers/{id}` | Buscar colaborador por ID |
-| `PUT` | `/workers/{id}` | Atualizar dados do colaborador |
-| `DELETE` | `/workers/{id}` | Remover colaborador |
-
-**Exemplo de cadastro:**
-```json
-POST /workers/
-{
-  "name": "Ana Paula",
-  "role": "Tech Lead",
-  "department": "Engineering",
-  "proficiency_score": 0.9,
-  "individual_performance_score": 0.85,
-  "tenure_years": 4.5
-}
+```text
+http://localhost:8000/docs
 ```
 
----
+Nessa página é possível consultar os endpoints disponíveis, testar requisições e visualizar os schemas esperados.
 
-### Groups `/groups`
+## Pipeline de Análise
 
-| Método | Rota | Descrição |
-|---|---|---|
-| `POST` | `/groups/` | Criar grupo/projeto |
-| `GET` | `/groups/` | Listar todos os grupos |
-| `GET` | `/groups/{id}` | Buscar grupo por ID |
-| `POST` | `/groups/{id}/members/{worker_id}` | Adicionar colaborador ao grupo |
-| `DELETE` | `/groups/{id}/members/{worker_id}` | Remover colaborador do grupo |
-| `GET` | `/groups/{id}/quality` | Score de qualidade atual do grupo |
+Ao executar `/analysis/run`, o sistema:
 
-**Exemplo de criação:**
-```json
-POST /groups/
-{
-  "name": "Alpha Squad",
-  "project_name": "Project Alpha",
-  "department": "Engineering",
-  "baseline_work_quality": 0.65,
-  "project_outcome_score": 0.75,
-  "member_ids": ["uuid-worker-1", "uuid-worker-2"]
-}
-```
+1. Carrega colaboradores, grupos, memberships e relações.
+2. Constrói o grafo de colaboração com NetworkX.
+3. Constrói o hipergrafo de grupos.
+4. Calcula centralidades da rede.
+5. Calcula delta score por colaborador e grupo.
+6. Calcula afinidade entre colaboradores e grupos.
+7. Normaliza métricas estruturais.
+8. Calcula o composite score.
+9. Classifica colaboradores como `HIGH`, `NEUTRAL` ou `LOW`.
+10. Persiste os resultados no banco.
 
----
+## Observações
 
-### Relationships `/relationships`
-
-| Método | Rota | Descrição |
-|---|---|---|
-| `POST` | `/relationships/` | Registrar relação entre dois colaboradores |
-| `GET` | `/relationships/` | Listar todas as relações |
-| `GET` | `/relationships/{id}` | Buscar relação por ID |
-| `DELETE` | `/relationships/{id}` | Remover relação |
-
-**Tipos de relação (`rel_type`):**
-- `COLLABORATION` — Colaboração direta em tarefas/projetos
-- `MEMBERSHIP` — Participação em grupo (criado automaticamente)
-- `CROSS_GROUP` — Interação entre membros de grupos diferentes
-
-**Exemplo:**
-```json
-POST /relationships/
-{
-  "source_id": "uuid-worker-1",
-  "target_id": "uuid-worker-2",
-  "rel_type": "COLLABORATION",
-  "interaction_frequency": 0.8,
-  "collaboration_quality": 0.9
-}
-```
-
-> O campo `weight` é calculado automaticamente: `interaction_frequency × collaboration_quality`
-
----
-
-### Analysis `/analysis`
-
-Este é o coração do sistema.
-
-| Método | Rota | Descrição |
-|---|---|---|
-| `POST` | `/analysis/run` | Executar pipeline completo e persistir resultados |
-| `GET` | `/analysis/results` | Retornar resultados sem re-executar |
-| `GET` | `/analysis/results/{worker_id}` | Resultado individual de um colaborador |
-| `GET` | `/analysis/delta/{worker_id}/{group_id}` | Delta de um colaborador em um grupo específico |
-| `GET` | `/analysis/leaderboard?top=10` | Ranking dos melhores colaboradores |
-| `POST` | `/analysis/classify` | Re-classificar com pesos e método customizados |
-
-**`POST /analysis/run`** — executa o pipeline completo:
-1. Constrói o grafo NetworkX e o hipergrafo HyperNetX
-2. Calcula delta score para cada colaborador em cada grupo
-3. Calcula afinidade de cada colaborador com seus grupos
-4. Calcula PageRank, betweenness e eigenvector centrality
-5. Combina tudo num composite score
-6. Classifica como HIGH / NEUTRAL / LOW
-7. Persiste os resultados no banco
-
-**`POST /analysis/classify`** — re-classifica com parâmetros customizados (sem persistir):
-```json
-{
-  "weights": {
-    "individual_performance": 0.40,
-    "proficiency": 0.10,
-    "pagerank": 0.25,
-    "betweenness": 0.10,
-    "mean_affinity": 0.05,
-    "mean_delta": 0.10
-  },
-  "method": "percentile",
-  "high_threshold": 0.65,
-  "low_threshold": 0.40,
-  "n_clusters": 3
-}
-```
-
-**Métodos de classificação (`method`):**
-- `percentile` *(padrão)* — acima do P70 → HIGH, abaixo do P30 → LOW
-- `threshold` — baseado nos valores `high_threshold` e `low_threshold`
-- `kmeans` — K-Means com `n_clusters` clusters, ranqueados por centroide
-
----
-
-### Visualization `/viz`
-
-| Método | Rota | Descrição |
-|---|---|---|
-| `GET` | `/viz/network` | Grafo interativo (HTML Pyvis) |
-| `GET` | `/viz/hypergraph` | Hipergrafo como imagem PNG (base64) |
-| `GET` | `/viz/performance-bar` | Gráfico de barras — Plotly JSON |
-| `GET` | `/viz/score-scatter` | Scatter PageRank vs Composite — Plotly JSON |
-
-**`GET /viz/network`** — retorna um HTML completo com o grafo interativo:
-- Nós verdes = HIGH performers
-- Nós vermelhos = LOW performers
-- Nós cinzas = NEUTRAL
-- Losangos azuis = grupos
-- Espessura das arestas proporcional ao peso da relação
-- Tooltip com nome, cargo, score e classificação
-
----
-
-## Algoritmos
-
-### Delta Score
-
-Mede quanto a qualidade do grupo muda com a presença do colaborador:
-
-```
-quality(G) = 0.35 × mean(performance_members)
-           + 0.30 × mean(collaboration_quality_intra_edges)
-           + 0.20 × project_outcome_score
-           + 0.15 × baseline_work_quality
-
-delta(w, G) = (quality_with_w − quality_without_w) / quality_without_w
-```
-
-Delta positivo → colaborador agrega valor ao grupo.
-Delta negativo → colaborador reduz a qualidade do grupo.
-
-### Afinidade
-
-Mede o quanto o colaborador está integrado ao seu grupo:
-
-```
-affinity(w, G) = edge_density × mean_collab_quality × tenure_bonus
-
-edge_density  = conexões de w com membros do G / (|G| − 1)
-tenure_bonus  = min(1.0, tenure_years / 5.0)
-```
-
-### Composite Score
-
-```
-composite = Σ(weight_i × metric_i)
-```
-
-Onde cada métrica é normalizada para [0, 1] antes da combinação. O delta é normalizado via `(delta + 1) / 2` para deslocar de [-1, +inf] para [0, 1].
-
----
-
-## Tecnologias
-
-| Biblioteca | Uso |
-|---|---|
-| FastAPI | API REST |
-| SQLAlchemy | ORM + SQLite |
-| Pydantic v2 | Validação de dados |
-| NetworkX | Grafo dirigido ponderado (PageRank, betweenness) |
-| HyperNetX | Hipergrafo de grupos |
-| pandas / numpy | Manipulação de matrizes de scores |
-| scikit-learn | K-Means para classificação por clusters |
-| Pyvis | Visualização interativa do grafo |
-| Plotly | Gráficos de performance |
-| matplotlib | Render do hipergrafo |
-| pytest | Testes automatizados |
+- Os scores de entrada devem estar no intervalo `[0, 1]`.
+- O banco SQLite local é criado automaticamente na pasta `data/`.
+- Os dados gerados pelo seed são sintéticos e servem apenas para demonstração.
+- A classificação padrão é relativa à população analisada, pois usa percentis.
