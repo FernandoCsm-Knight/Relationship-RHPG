@@ -67,8 +67,16 @@
 <!-- Leaderboard -->
 <div class="card">
   <div class="card-header d-flex justify-content-between">
-    <span><i class="bi bi-trophy-fill"></i>Leaderboard</span>
+    <span><i class="bi bi-trophy-fill me-2"></i>Leaderboard</span>
     <span style="color:var(--muted);font-size:.78rem" id="lb-subtitle">Aguardando análise…</span>
+  </div>
+  <div class="px-3 pt-3">
+    <div class="input-group input-group-sm" style="max-width:360px">
+      <span class="input-group-text" style="background:var(--s2);border-color:var(--border);color:var(--muted)">
+        <i class="bi bi-search"></i>
+      </span>
+      <input id="lb-search" class="form-control" type="search" placeholder="Buscar colaborador por nome, cargo ou departamento">
+    </div>
   </div>
   <div style="overflow-x:auto">
     <table class="table mb-0">
@@ -80,15 +88,23 @@
           <th>Dept.</th>
           <th>Score</th>
           <th class="pe-4">Classificação</th>
+          <th class="pe-4">IA</th>
         </tr>
       </thead>
       <tbody id="lb-body">
-        <tr><td colspan="6" class="text-center py-5" style="color:var(--muted)">
+        <tr><td colspan="7" class="text-center py-5" style="color:var(--muted)">
           <i class="bi bi-play-circle d-block mb-2" style="font-size:2rem"></i>
           Clique em "Executar Análise" para ver os resultados
         </td></tr>
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="card mt-3">
+  <div class="card-header"><i class="bi bi-stars me-2"></i>Avaliação Contextual por IA</div>
+  <div class="card-body" id="worker-ai-panel" style="min-height:120px;color:var(--muted)">
+    Clique em “Avaliar IA” na Leaderboard para gerar uma análise do colaborador considerando currículo, equipe, empresa e rede de relações.
   </div>
 </div>
 {% endblock %}
@@ -112,6 +128,7 @@ const CLASS_BADGE = {
   LOW:     '<span class="badge-low">Baixa</span>',
 };
 const CLASS_COLOR = { HIGH: '#00a878', NEUTRAL: '#6b7a8d', LOW: '#d63557' };
+let leaderboardData = [];
 
 function chartLayout(layout) {
   return {
@@ -137,13 +154,13 @@ async function loadCharts() {
 
 async function loadLeaderboard() {
   try {
-    const data = await fetch('/analysis/leaderboard?top=50').then(r => r.ok ? r.json() : null);
-    if (!data) return;
+    leaderboardData = await fetch('/analysis/leaderboard?top=50').then(r => r.ok ? r.json() : null);
+    if (!leaderboardData) return;
 
-    const total = data.length;
-    const high    = data.filter(d => d.performance_class === 'HIGH').length;
-    const neutral = data.filter(d => d.performance_class === 'NEUTRAL').length;
-    const low     = data.filter(d => d.performance_class === 'LOW').length;
+    const total = leaderboardData.length;
+    const high    = leaderboardData.filter(d => d.performance_class === 'HIGH').length;
+    const neutral = leaderboardData.filter(d => d.performance_class === 'NEUTRAL').length;
+    const low     = leaderboardData.filter(d => d.performance_class === 'LOW').length;
     const pct = n => total ? `${Math.round(n / total * 100)}% do total` : '—';
 
     document.getElementById('s-total').textContent   = total;
@@ -155,29 +172,90 @@ async function loadLeaderboard() {
     document.getElementById('s-low-pct').textContent     = pct(low);
     document.getElementById('lb-subtitle').textContent   = `${total} colaboradores · ordenados por score`;
 
-    const rows = data.map(d => {
-      const pct  = Math.round(d.composite_score * 100);
-      const fill = CLASS_COLOR[d.performance_class] || '#8899aa';
-      const rankClass = d.rank <= 3 ? `rank-${d.rank}` : 'rank-n';
-      return `<tr>
-        <td class="ps-4"><span class="rank ${rankClass}">${d.rank}</span></td>
-        <td class="fw-semibold">${d.name}</td>
-        <td style="color:var(--muted)">${d.role}</td>
-        <td style="color:var(--muted);font-size:.8rem">${d.department ?? '—'}</td>
-        <td>
-          <div class="d-flex align-items-center gap-2">
-            <div class="score-bar flex-grow-1" style="max-width:100px">
-              <div class="score-fill" style="width:${pct}%;background:${fill}"></div>
-            </div>
-            <span style="font-size:.8rem;color:var(--muted);min-width:36px">${d.composite_score.toFixed(3)}</span>
-          </div>
-        </td>
-        <td class="pe-4">${CLASS_BADGE[d.performance_class] ?? d.performance_class}</td>
-      </tr>`;
-    }).join('');
-    document.getElementById('lb-body').innerHTML = rows ||
-      '<tr><td colspan="6" class="text-center py-4 text-muted">Sem dados.</td></tr>';
+    renderLeaderboard();
   } catch(e) { console.warn('Leaderboard:', e.message); }
+}
+
+function renderLeaderboard() {
+  const term = document.getElementById('lb-search')?.value.trim().toLowerCase() || '';
+  const filtered = leaderboardData.filter(d => {
+    const haystack = `${d.name} ${d.role} ${d.department ?? ''}`.toLowerCase();
+    return haystack.includes(term);
+  });
+
+  const rows = filtered.map(d => {
+    const pct  = Math.round(d.composite_score * 100);
+    const fill = CLASS_COLOR[d.performance_class] || '#8899aa';
+    const rankClass = d.rank <= 3 ? `rank-${d.rank}` : 'rank-n';
+    return `<tr>
+      <td class="ps-4"><span class="rank ${rankClass}">${d.rank}</span></td>
+      <td class="fw-semibold">${d.name}</td>
+      <td style="color:var(--muted)">${d.role}</td>
+      <td style="color:var(--muted);font-size:.8rem">${d.department ?? '—'}</td>
+      <td>
+        <div class="d-flex align-items-center gap-2">
+          <div class="score-bar flex-grow-1" style="max-width:100px">
+            <div class="score-fill" style="width:${pct}%;background:${fill}"></div>
+          </div>
+          <span style="font-size:.8rem;color:var(--muted);min-width:36px">${d.composite_score.toFixed(3)}</span>
+        </div>
+      </td>
+      <td class="pe-4">${CLASS_BADGE[d.performance_class] ?? d.performance_class}</td>
+      <td class="pe-4"><button class="btn-ghost" onclick="evaluateWorkerAI('${d.worker_id}', this)"><i class="bi bi-stars me-1"></i>Avaliar IA</button></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('lb-body').innerHTML = rows ||
+    `<tr><td colspan="7" class="text-center py-4 text-muted">${term ? 'Nenhum colaborador encontrado.' : 'Sem dados.'}</td></tr>`;
+
+  const total = leaderboardData.length;
+  document.getElementById('lb-subtitle').textContent = term
+    ? `${filtered.length} de ${total} colaboradores`
+    : `${total} colaboradores · ordenados por score`;
+}
+
+function renderList(items) {
+  return (items || []).length ? `<ul class="mb-0">${items.map(i => `<li>${i}</li>`).join('')}</ul>` : '—';
+}
+
+function renderWorkerEvaluation(data) {
+  document.getElementById('worker-ai-panel').innerHTML = `
+    <div class="row g-3">
+      <div class="col-md-3">
+        <div class="stat-tile">
+          <div class="value">${data.overall_score.toFixed(2)}</div>
+          <div class="label">Score IA</div>
+          <div class="trend">${data.recommendation} · conf. ${data.confidence.toFixed(2)}</div>
+        </div>
+      </div>
+      <div class="col-md-9">
+        <p style="color:var(--text);margin-bottom:.75rem">${data.summary}</p>
+        <div style="font-size:.84rem;color:var(--muted)"><strong>Empresa:</strong> ${data.company_context_assessment}</div>
+        <div style="font-size:.84rem;color:var(--muted);margin-top:.35rem"><strong>Equipe:</strong> ${data.team_context_assessment}</div>
+      </div>
+      <div class="col-md-6"><h6>Pontos fortes</h6>${renderList(data.strengths)}</div>
+      <div class="col-md-6"><h6>Riscos</h6>${renderList(data.risks)}</div>
+      <div class="col-md-6"><h6>Oportunidades</h6>${renderList(data.growth_opportunities)}</div>
+      <div class="col-md-6"><h6>Ações sugeridas</h6>${renderList(data.suggested_actions)}</div>
+    </div>`;
+}
+
+async function evaluateWorkerAI(workerId, button) {
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner-sm me-1"></span>Avaliando';
+  document.getElementById('worker-ai-panel').innerHTML = '<div style="color:var(--muted)">Gerando avaliação contextual…</div>';
+  try {
+    const r = await fetch(`/analysis/results/${workerId}/evaluate-ai`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    renderWorkerEvaluation(await r.json());
+    toast('Avaliação contextual concluída.');
+  } catch (e) {
+    document.getElementById('worker-ai-panel').innerHTML = '<div style="color:var(--low)">Não foi possível gerar a avaliação.</div>';
+    toast('Erro: ' + e.message, 'err');
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '<i class="bi bi-stars me-1"></i>Avaliar IA';
+  }
 }
 
 async function runAnalysis() {
@@ -198,6 +276,7 @@ async function runAnalysis() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('lb-search').addEventListener('input', renderLeaderboard);
   loadLeaderboard();
   loadCharts();
 });

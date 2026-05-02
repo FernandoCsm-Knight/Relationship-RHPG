@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 from rhpg.models.worker import PerformanceClass
@@ -13,6 +14,29 @@ class WorkerCreate(BaseModel):
     proficiency_score: float = Field(ge=0.0, le=1.0)
     individual_performance_score: float = Field(ge=0.0, le=1.0)
     tenure_years: float = Field(ge=0.0, default=0.0)
+    email: Optional[str] = None
+    location: Optional[str] = None
+    seniority_level: Optional[str] = None
+    resume_text: Optional[str] = None
+    skills: list[str] = Field(default_factory=list)
+    education: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    past_projects: list[str] = Field(default_factory=list)
+    achievements_text: Optional[str] = None
+    availability_notes: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+
+
+class WorkerCandidateSummary(BaseModel):
+    candidate_id: str
+    group_id: str
+    group_name: str
+    status: str
+    target_role: Optional[str] = None
+    fit_score: Optional[float] = None
+    recommendation: Optional[str] = None
 
 
 class WorkerOut(BaseModel):
@@ -27,6 +51,20 @@ class WorkerOut(BaseModel):
     betweenness_centrality: float
     composite_score: float
     performance_class: Optional[PerformanceClass]
+    email: Optional[str] = None
+    location: Optional[str] = None
+    seniority_level: Optional[str] = None
+    resume_text: Optional[str] = None
+    skills: list[str] = Field(default_factory=list)
+    education: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    languages: list[str] = Field(default_factory=list)
+    past_projects: list[str] = Field(default_factory=list)
+    achievements_text: Optional[str] = None
+    availability_notes: Optional[str] = None
+    linkedin_url: Optional[str] = None
+    portfolio_url: Optional[str] = None
+    candidates: list[WorkerCandidateSummary] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -40,6 +78,28 @@ class GroupCreate(BaseModel):
     baseline_work_quality: float = Field(ge=0.0, le=1.0)
     project_outcome_score: float = Field(ge=0.0, le=1.0)
     member_ids: list[str] = Field(default_factory=list)
+    open_role_title: Optional[str] = None
+    required_seniority: Optional[str] = None
+    team_context: Optional[str] = None
+    required_skills: list[str] = Field(default_factory=list)
+    preferred_skills: list[str] = Field(default_factory=list)
+    responsibilities: list[str] = Field(default_factory=list)
+    hiring_notes: Optional[str] = None
+
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    project_name: Optional[str] = None
+    department: Optional[str] = None
+    baseline_work_quality: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    project_outcome_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    open_role_title: Optional[str] = None
+    required_seniority: Optional[str] = None
+    team_context: Optional[str] = None
+    required_skills: Optional[list[str]] = None
+    preferred_skills: Optional[list[str]] = None
+    responsibilities: Optional[list[str]] = None
+    hiring_notes: Optional[str] = None
 
 
 class GroupOut(BaseModel):
@@ -51,6 +111,13 @@ class GroupOut(BaseModel):
     project_outcome_score: float
     adjusted_work_quality: float
     member_ids: list[str]
+    open_role_title: Optional[str] = None
+    required_seniority: Optional[str] = None
+    team_context: Optional[str] = None
+    required_skills: list[str] = Field(default_factory=list)
+    preferred_skills: list[str] = Field(default_factory=list)
+    responsibilities: list[str] = Field(default_factory=list)
+    hiring_notes: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -123,3 +190,68 @@ class LeaderboardEntry(BaseModel):
     department: str
     composite_score: float
     performance_class: PerformanceClass
+
+
+# ── Candidates / AI Fit Evaluation ───────────────────────────────────────────
+
+class CandidateCreate(BaseModel):
+    worker_id: str
+    group_id: str
+    status: str = Field(default="CONSIDERING")
+    target_role: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CandidateUpdate(BaseModel):
+    status: Optional[str] = None
+    target_role: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CandidateAIEvaluationOut(BaseModel):
+    fit_score: float = Field(ge=0.0, le=1.0)
+    recommendation: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    summary: str
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    skill_matches: list[str] = Field(default_factory=list)
+    skill_gaps: list[str] = Field(default_factory=list)
+    interview_questions: list[str] = Field(default_factory=list)
+
+
+class CandidateOut(BaseModel):
+    id: str
+    worker_id: str
+    worker_name: str
+    group_id: str
+    group_name: str
+    status: str
+    target_role: Optional[str] = None
+    notes: Optional[str] = None
+    fit_score: Optional[float] = None
+    recommendation: Optional[str] = None
+    confidence: Optional[float] = None
+    summary: Optional[str] = None
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    skill_matches: list[str] = Field(default_factory=list)
+    skill_gaps: list[str] = Field(default_factory=list)
+    interview_questions: list[str] = Field(default_factory=list)
+    model: Optional[str] = None
+    evaluated_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class WorkerAIEvaluationOut(BaseModel):
+    overall_score: float = Field(ge=0.0, le=1.0)
+    recommendation: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    summary: str
+    company_context_assessment: str
+    team_context_assessment: str
+    strengths: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    growth_opportunities: list[str] = Field(default_factory=list)
+    suggested_actions: list[str] = Field(default_factory=list)

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Equipes{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-start justify-content-between">
+  <div>
+    <h4>Equipes</h4>
+    <p>Cadastre equipes e descreva o perfil desejado para futuras avaliações de encaixe.</p>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-xl-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-kanban-fill"></i>Nova Equipe</div>
+      <div class="card-body">
+        <form id="group-form" class="row g-2">
+          <div class="col-12"><input class="form-control" name="name" placeholder="Nome da equipe" required></div>
+          <div class="col-md-6"><input class="form-control" name="project_name" placeholder="Projeto" required></div>
+          <div class="col-md-6"><input class="form-control" name="department" placeholder="Departamento" required></div>
+          <div class="col-md-6"><input class="form-control" name="baseline_work_quality" type="number" min="0" max="1" step="0.01" required placeholder="Qualidade base 0-1"></div>
+          <div class="col-md-6"><input class="form-control" name="project_outcome_score" type="number" min="0" max="1" step="0.01" required placeholder="Resultado 0-1"></div>
+          <div class="col-md-6"><input class="form-control" name="open_role_title" placeholder="Cargo aberto"></div>
+          <div class="col-md-6"><input class="form-control" name="required_seniority" placeholder="Senioridade desejada"></div>
+          <div class="col-12"><textarea class="form-control" name="team_context" rows="3" placeholder="Contexto da equipe"></textarea></div>
+          <div class="col-12"><textarea class="form-control" name="required_skills" rows="2" placeholder="Skills obrigatórias"></textarea></div>
+          <div class="col-12"><textarea class="form-control" name="preferred_skills" rows="2" placeholder="Skills desejáveis"></textarea></div>
+          <div class="col-12"><textarea class="form-control" name="responsibilities" rows="2" placeholder="Responsabilidades"></textarea></div>
+          <div class="col-12"><textarea class="form-control" name="hiring_notes" rows="2" placeholder="Notas para avaliação"></textarea></div>
+          <div class="col-12 text-end">
+            <button class="btn-primary-custom" type="submit"><i class="bi bi-save me-1"></i>Cadastrar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-kanban"></i>Equipes Cadastradas</div>
+      <div style="overflow-x:auto">
+        <table class="table mb-0">
+          <thead><tr><th>Equipe</th><th>Perfil buscado</th><th>Skills</th><th>Membros</th></tr></thead>
+          <tbody id="groups-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function asList(value) {
+  return value.split(/[\n,]/).map(v => v.trim()).filter(Boolean);
+}
+
+async function loadGroups() {
+  const groups = await fetch('/groups/').then(r => r.json());
+  document.getElementById('groups-body').innerHTML = groups.map(g => `
+    <tr>
+      <td class="fw-semibold">${g.name}<div style="color:var(--muted);font-size:.75rem">${g.project_name} · ${g.department}</div></td>
+      <td>${g.open_role_title || '—'}<div style="color:var(--muted);font-size:.75rem">${g.required_seniority || ''}</div></td>
+      <td style="font-size:.8rem">${(g.required_skills || []).join(', ') || '—'}</td>
+      <td>${(g.member_ids || []).length}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="text-center py-4 text-muted">Nenhuma equipe cadastrada.</td></tr>';
+}
+
+document.getElementById('group-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const payload = {
+    ...data,
+    baseline_work_quality: Number(data.baseline_work_quality),
+    project_outcome_score: Number(data.project_outcome_score),
+    member_ids: [],
+    required_skills: asList(data.required_skills || ''),
+    preferred_skills: asList(data.preferred_skills || ''),
+    responsibilities: asList(data.responsibilities || ''),
+  };
+  const r = await fetch('/groups/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  if (!r.ok) return toast(await r.text(), 'err');
+  form.reset();
+  toast('Equipe cadastrada.');
+  loadGroups();
+});
+
+window.addEventListener('DOMContentLoaded', loadGroups);
+</script>
+{% endblock %}

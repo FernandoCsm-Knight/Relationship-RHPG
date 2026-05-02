@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Candidaturas{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-start justify-content-between">
+  <div>
+    <h4>Candidaturas</h4>
+    <p>Avalie se um colaborador é uma boa adição para uma equipe sem alterar o grafo atual.</p>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-xl-4">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-person-check-fill"></i>Nova Candidatura</div>
+      <div class="card-body">
+        <form id="candidate-form" class="row g-2">
+          <div class="col-12"><select class="form-select" name="worker_id" id="worker-select" required></select></div>
+          <div class="col-12"><select class="form-select" name="group_id" id="group-select" required></select></div>
+          <div class="col-12"><input class="form-control" name="target_role" placeholder="Papel alvo"></div>
+          <div class="col-12">
+            <select class="form-select" name="status">
+              <option value="CONSIDERING">Em consideração</option>
+              <option value="SHORTLISTED">Pré-selecionado</option>
+              <option value="APPROVED">Aprovado</option>
+              <option value="REJECTED">Rejeitado</option>
+            </select>
+          </div>
+          <div class="col-12"><textarea class="form-control" name="notes" rows="4" placeholder="Notas internas"></textarea></div>
+          <div class="col-12 text-end">
+            <button class="btn-primary-custom" type="submit"><i class="bi bi-plus-lg me-1"></i>Criar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-8">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-list-check"></i>Candidaturas</div>
+      <div style="overflow-x:auto">
+        <table class="table mb-0">
+          <thead><tr><th>Colaborador</th><th>Equipe</th><th>Status</th><th>Fit</th><th>Recomendação</th><th></th></tr></thead>
+          <tbody id="candidates-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="bi bi-stars"></i>Resultado da Avaliação</div>
+  <div class="card-body" id="evaluation-panel" style="min-height:120px;color:var(--muted)">
+    Selecione “Avaliar com IA” em uma candidatura para ver o parecer estruturado.
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let candidates = [];
+
+function recommendationLabel(value) {
+  const labels = { STRONG_FIT: 'Forte encaixe', FIT: 'Bom encaixe', PARTIAL_FIT: 'Encaixe parcial', NOT_FIT: 'Não indicado' };
+  return labels[value] || value || '—';
+}
+
+function list(items) {
+  return (items || []).length ? `<ul class="mb-0">${items.map(i => `<li>${i}</li>`).join('')}</ul>` : '—';
+}
+
+async function loadOptions() {
+  const [workers, groups] = await Promise.all([
+    fetch('/workers/').then(r => r.json()),
+    fetch('/groups/').then(r => r.json()),
+  ]);
+  document.getElementById('worker-select').innerHTML = workers.map(w => `<option value="${w.id}">${w.name} · ${w.role}</option>`).join('');
+  document.getElementById('group-select').innerHTML = groups.map(g => `<option value="${g.id}">${g.name} · ${g.open_role_title || g.project_name}</option>`).join('');
+}
+
+async function loadCandidates() {
+  candidates = await fetch('/candidates/').then(r => r.json());
+  document.getElementById('candidates-body').innerHTML = candidates.map(c => `
+    <tr>
+      <td class="fw-semibold">${c.worker_name}<div style="color:var(--muted);font-size:.75rem">${c.target_role || ''}</div></td>
+      <td>${c.group_name}</td>
+      <td>${c.status}</td>
+      <td>${c.fit_score == null ? '—' : c.fit_score.toFixed(2)}</td>
+      <td>${recommendationLabel(c.recommendation)}</td>
+      <td class="text-end"><button class="btn-ghost" onclick="evaluateCandidate('${c.id}', this)"><i class="bi bi-stars me-1"></i>Avaliar</button></td>
+    </tr>`).join('') || '<tr><td colspan="6" class="text-center py-4 text-muted">Nenhuma candidatura criada.</td></tr>';
+}
+
+function showEvaluation(c) {
+  document.getElementById('evaluation-panel').innerHTML = `
+    <div class="row g-3">
+      <div class="col-md-3"><div class="stat-tile"><div class="value">${c.fit_score == null ? '—' : c.fit_score.toFixed(2)}</div><div class="label">Fit Score</div><div class="trend">${recommendationLabel(c.recommendation)}</div></div></div>
+      <div class="col-md-9"><p style="color:var(--text)">${c.summary || 'Sem avaliação salva.'}</p></div>
+      <div class="col-md-6"><h6>Pontos fortes</h6>${list(c.strengths)}</div>
+      <div class="col-md-6"><h6>Riscos</h6>${list(c.risks)}</div>
+      <div class="col-md-6"><h6>Skills aderentes</h6>${list(c.skill_matches)}</div>
+      <div class="col-md-6"><h6>Gaps</h6>${list(c.skill_gaps)}</div>
+      <div class="col-12"><h6>Perguntas sugeridas</h6>${list(c.interview_questions)}</div>
+    </div>`;
+}
+
+async function evaluateCandidate(id, button) {
+  button.disabled = true;
+  button.innerHTML = '<span class="spinner-sm me-1"></span>Avaliando';
+  const r = await fetch(`/candidates/${id}/evaluate`, { method:'POST' });
+  button.disabled = false;
+  button.innerHTML = '<i class="bi bi-stars me-1"></i>Avaliar';
+  if (!r.ok) return toast(await r.text(), 'err');
+  const c = await r.json();
+  toast('Avaliação concluída.');
+  showEvaluation(c);
+  await loadCandidates();
+}
+
+document.getElementById('candidate-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = Object.fromEntries(new FormData(form).entries());
+  const r = await fetch('/candidates/', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  if (!r.ok) return toast(await r.text(), 'err');
+  form.reset();
+  toast('Candidatura criada.');
+  loadCandidates();
+});
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadOptions();
+  await loadCandidates();
+});
+</script>
+{% endblock %}

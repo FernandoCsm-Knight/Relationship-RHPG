@@ -32,3 +32,18 @@ def network(request: Request):
 @router.get("/hypergraph", response_class=HTMLResponse)
 def hypergraph(request: Request):
     return _render("hypergraph.html", page="hypergraph")
+
+
+@router.get("/workers", response_class=HTMLResponse)
+def workers(request: Request):
+    return _render("workers.html", page="workers")
+
+
+@router.get("/candidates", response_class=HTMLResponse)
+def candidates(request: Request):
+    return _render("candidates.html", page="candidates")
+
+
+@router.get("/groups", response_class=HTMLResponse)
+def groups(request: Request):
+    return _render("groups.html", page="groups")

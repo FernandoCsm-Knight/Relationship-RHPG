@@ -6,14 +6,17 @@ from rhpg.models.schemas import (
     WorkerAnalysisResult,
     ClassifyRequest,
     LeaderboardEntry,
+    WorkerAIEvaluationOut,
 )
-from rhpg.storage.repository import WorkerRepository, GroupRepository, RelationshipRepository
+from rhpg.storage.repository import CandidateRepository, WorkerRepository, GroupRepository, RelationshipRepository
 from rhpg.graph.builder import build_graphs
 from rhpg.algorithms.classifier import run_full_analysis
 from rhpg.algorithms.delta_score import compute_worker_delta, compute_group_quality_score
 from rhpg.models.worker import Worker
 from rhpg.models.group import Group
 from rhpg.models.relationship import Relationship, RelationshipType
+from rhpg.services.fit_evaluator import FitEvaluatorError, OpenAIUnavailableError
+from rhpg.services.worker_evaluator import evaluate_worker_context
 
 router = APIRouter()
 
@@ -60,6 +63,45 @@ def get_worker_result(worker_id: str, db: Session = Depends(get_db)):
     if not match:
         raise HTTPException(status_code=404, detail="Worker not found")
     return match
+
+
+@router.post("/results/{worker_id}/evaluate-ai", response_model=WorkerAIEvaluationOut)
+def evaluate_worker_ai(worker_id: str, db: Session = Depends(get_db)):
+    worker_orm = WorkerRepository(db).get_by_id(worker_id)
+    if not worker_orm:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    _, _, workers, groups, relationships = build_graphs(db)
+    memberships = GroupRepository(db).get_all_memberships()
+    results = run_full_analysis(workers, groups, relationships, memberships)
+    result_map = {r.worker_id: r for r in results}
+    for worker in workers:
+        result = result_map.get(worker.id)
+        if result:
+            worker.composite_score = result.composite_score
+            worker.performance_class = result.performance_class
+            worker.pagerank_score = result.pagerank_score
+            worker.betweenness_centrality = result.betweenness_centrality
+
+    target = next((w for w in workers if w.id == worker_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    candidates = CandidateRepository(db).get_all(worker_id=worker_id)
+    try:
+        evaluation, _model = evaluate_worker_context(
+            target,
+            workers,
+            groups,
+            relationships,
+            memberships,
+            candidates,
+        )
+    except OpenAIUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except FitEvaluatorError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return evaluation
 
 
 @router.get("/delta/{worker_id}/{group_id}")

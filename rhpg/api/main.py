@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from rhpg.storage.database import init_db
-from rhpg.api.routers import workers, groups, relationships, analysis, visualization, dashboard
+from rhpg.api.routers import workers, groups, relationships, analysis, visualization, dashboard, candidates
 
 
 @asynccontextmanager
@@ -37,4 +37,5 @@ app.include_router(workers.router, prefix="/workers", tags=["Workers"])
 app.include_router(groups.router, prefix="/groups", tags=["Groups"])
 app.include_router(relationships.router, prefix="/relationships", tags=["Relationships"])
 app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"])
+app.include_router(candidates.router, prefix="/candidates", tags=["Candidates"])
 app.include_router(visualization.router, prefix="/viz", tags=["Visualization"])

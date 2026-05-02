@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from rhpg.api.dependencies import get_db
-from rhpg.models.schemas import GroupCreate, GroupOut, GroupQualityOut
-from rhpg.storage.repository import GroupRepository, WorkerRepository, RelationshipRepository
+from rhpg.models.schemas import GroupCreate, GroupOut, GroupQualityOut, GroupUpdate
+from rhpg.storage.repository import GroupRepository, WorkerRepository, RelationshipRepository, load_json_list
 from rhpg.models.group import Group
 from rhpg.models.relationship import RelationshipType, Relationship
 from rhpg.algorithms.delta_score import compute_group_quality_score
@@ -21,6 +21,13 @@ def _orm_group_to_out(orm, member_ids: list[str]) -> GroupOut:
         project_outcome_score=orm.project_outcome_score,
         adjusted_work_quality=orm.adjusted_work_quality,
         member_ids=member_ids,
+        open_role_title=orm.open_role_title,
+        required_seniority=orm.required_seniority,
+        team_context=orm.team_context,
+        required_skills=load_json_list(orm.required_skills_json),
+        preferred_skills=load_json_list(orm.preferred_skills_json),
+        responsibilities=load_json_list(orm.responsibilities_json),
+        hiring_notes=orm.hiring_notes,
     )
 
 
@@ -43,6 +50,15 @@ def list_groups(db: Session = Depends(get_db)):
 def get_group(group_id: str, db: Session = Depends(get_db)):
     repo = GroupRepository(db)
     group = repo.get_by_id(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return _orm_group_to_out(group, repo.get_member_ids(group_id))
+
+
+@router.patch("/{group_id}", response_model=GroupOut)
+def update_group(group_id: str, data: GroupUpdate, db: Session = Depends(get_db)):
+    repo = GroupRepository(db)
+    group = repo.update(group_id, data.model_dump(exclude_unset=True))
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     return _orm_group_to_out(group, repo.get_member_ids(group_id))

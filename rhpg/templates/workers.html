@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Colaboradores{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-start justify-content-between">
+  <div>
+    <h4>Colaboradores</h4>
+    <p>Cadastro enriquecido com currículo, habilidades, projetos e candidaturas em andamento.</p>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-xl-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-person-plus-fill"></i>Novo Colaborador</div>
+      <div class="card-body">
+        <form id="worker-form" class="row g-2">
+          <div class="col-12"><input class="form-control" name="name" placeholder="Nome" required></div>
+          <div class="col-md-6"><input class="form-control" name="role" placeholder="Cargo" required></div>
+          <div class="col-md-6"><input class="form-control" name="department" placeholder="Departamento" required></div>
+          <div class="col-md-6"><input class="form-control" name="email" placeholder="Email"></div>
+          <div class="col-md-6"><input class="form-control" name="location" placeholder="Localização"></div>
+          <div class="col-md-6"><input class="form-control" name="seniority_level" placeholder="Senioridade"></div>
+          <div class="col-md-6"><input class="form-control" name="tenure_years" type="number" min="0" step="0.1" value="0" placeholder="Anos de casa"></div>
+          <div class="col-md-6"><input class="form-control" name="proficiency_score" type="number" min="0" max="1" step="0.01" required placeholder="Proficiência 0-1"></div>
+          <div class="col-md-6"><input class="form-control" name="individual_performance_score" type="number" min="0" max="1" step="0.01" required placeholder="Performance 0-1"></div>
+          <div class="col-12">
+            <input class="form-control" name="resume_pdf" type="file" accept="application/pdf">
+            <div style="color:var(--muted);font-size:.75rem;margin-top:.25rem">PDF do currículo opcional. O texto extraído será anexado ao resumo.</div>
+          </div>
+          <div class="col-12"><textarea class="form-control" name="resume_text" rows="4" placeholder="Resumo do currículo"></textarea></div>
+          <div class="col-12"><textarea class="form-control" name="skills" rows="2" placeholder="Skills, separadas por vírgula ou linha"></textarea></div>
+          <div class="col-12"><textarea class="form-control" name="past_projects" rows="3" placeholder="Projetos cumpridos, separados por linha"></textarea></div>
+          <div class="col-12"><textarea class="form-control" name="achievements_text" rows="2" placeholder="Conquistas relevantes"></textarea></div>
+          <div class="col-md-6"><input class="form-control" name="linkedin_url" placeholder="LinkedIn"></div>
+          <div class="col-md-6"><input class="form-control" name="portfolio_url" placeholder="Portfólio"></div>
+          <div class="col-12 text-end">
+            <button class="btn-primary-custom" type="submit"><i class="bi bi-save me-1"></i>Cadastrar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-7">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-people-fill"></i>Funcionários Cadastrados</div>
+      <div style="overflow-x:auto">
+        <table class="table mb-0">
+          <thead><tr><th>Nome</th><th>Cargo</th><th>Score</th><th>Classe</th><th>Candidaturas</th></tr></thead>
+          <tbody id="workers-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function asList(value) {
+  return value.split(/[\n,]/).map(v => v.trim()).filter(Boolean);
+}
+
+function classBadge(value) {
+  if (value === 'HIGH') return '<span class="badge-high">Alta</span>';
+  if (value === 'LOW') return '<span class="badge-low">Baixa</span>';
+  if (value === 'NEUTRAL') return '<span class="badge-neutral">Neutra</span>';
+  return '<span class="badge-neutral">Sem análise</span>';
+}
+
+async function loadWorkers() {
+  const workers = await fetch('/workers/').then(r => r.json());
+  document.getElementById('workers-body').innerHTML = workers.map(w => {
+    const candidates = (w.candidates || []).map(c => `${c.group_name}${c.fit_score != null ? ` (${c.fit_score.toFixed(2)})` : ''}`).join('<br>') || '—';
+    return `<tr>
+      <td class="fw-semibold">${w.name}<div style="color:var(--muted);font-size:.75rem">${w.email ?? ''}</div></td>
+      <td>${w.role}<div style="color:var(--muted);font-size:.75rem">${w.department}</div></td>
+      <td>${Number(w.composite_score ?? 0).toFixed(3)}</td>
+      <td>${classBadge(w.performance_class)}</td>
+      <td style="font-size:.8rem">${candidates}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="text-center py-4 text-muted">Nenhum colaborador cadastrado.</td></tr>';
+}
+
+document.getElementById('worker-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const payload = new FormData(form);
+  const r = await fetch('/workers/upload-pdf', { method:'POST', body: payload });
+  if (!r.ok) return toast(await r.text(), 'err');
+  form.reset();
+  toast('Colaborador cadastrado.');
+  loadWorkers();
+});
+
+window.addEventListener('DOMContentLoaded', loadWorkers);
+</script>
+{% endblock %}
